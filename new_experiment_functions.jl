@@ -1,6 +1,7 @@
 ##########################
 # MCTS running functions #
 ##########################
+include("MDP.jl")
 include("new_MCTS.jl")
 include("value_iteration.jl")
 using Distributions
@@ -81,8 +82,6 @@ Returns:
 
     return all_node_returns, T_samples
 end
-
-
 
 function compute_risk_at_root(mdp::MDP, average_node_returns, T_samples;
     root_state::Int = 1,
@@ -189,45 +188,54 @@ end
 ##############
 # Bias plots #
 ##############
-function compute_regret_at_root(mdp::MDP, all_node_returns, T_samples;
+function compute_regret_at_root(
+    mdp::MDP,
+    all_node_returns,
+    T_samples;
     root_state = 1,
-    logscale = "none"   # options: "none", "x", "y", "xy"
+    logscale = "none",       # options: "none", "x", "y", "xy"
+    divide_by_log = false
 )
     n_simulations, A, mcts_iterations = size(all_node_returns)
     S = length(mdp.states)
 
+    # --- Compute optimal value ---
     optimal_q_values = value_iteration(mdp)[3]
-    arms = collect(1:A)
     arm_means = optimal_q_values[1, root_state, :]
+    rsa = get_reward_function(mdp)
+    # Used for debugging in UCB1
+    # println([rsa(root_state, a) for a in 1:A])
     # println(arm_means)
     optimal_mean = maximum(arm_means)
 
-    # average estimated value across runs for each action at each iteration
-    mc_estimates = sum(all_node_returns, dims = 1) ./ n_simulations  # (1, A, T)
-    mc_estimates = dropdims(mean(all_node_returns, dims = 1), dims = 1)
-    # best action estimate at each iteration
+    # --- Compute empirical estimates ---
+    mc_estimates = dropdims(mean(all_node_returns, dims = 1), dims = 1)  # (A, T)
     empirical_returns = vec(sum(mc_estimates, dims = 1))  # (T,)
 
-    # now compute n * | E[estimate] - mu* |
-    scaled_error = abs.(empirical_returns .- (1:mcts_iterations) .*optimal_mean)
+    # --- Compute regret ---
+    scaled_error = abs.(empirical_returns .- (1:mcts_iterations) .* optimal_mean)
 
-    # determine y-limits to always include optimal_mean
-    # ymin = min(minimum(mc_estimates), optimal_mean) - 1
-    # ymax = max(maximum(mc_estimates), optimal_mean) + 1
-    
-    # base plot
-    q = plot(1:mcts_iterations, scaled_error,
+    # --- Optionally divide by log(t) ---
+    if divide_by_log
+        t_vals = collect(1:mcts_iterations)
+        log_terms = log.(max.(t_vals, 2))  # avoid log(1)=0
+        scaled_error = scaled_error ./ log_terms
+    end
+
+    # --- Base plot ---
+    y_label = divide_by_log ? L"\text{Regret} / \log t" : "Regret"
+
+    q = plot(
+        1:mcts_iterations,
+        scaled_error;
         xlabel = L"t",
-        ylabel = "Regret",
-        title  = "Regret over $n_simulations runs",
-        # ylim   = (ymin, ymax),
-        label  = "Regret"
+        ylabel = y_label,
+        label = "Empirical",
+        legend = true,
+        linewidth = 8
     )
 
-    # # dashed reference line at the optimal arm's mean reward
-    # hline!(q, [optimal_mean], linestyle = :dash, label = "Optimal μ")
-
-    # apply log scaling if requested
+    # --- Apply log scales if requested ---
     if logscale == "x"
         plot!(q, xscale = :log10)
     elseif logscale == "y"
@@ -236,7 +244,7 @@ function compute_regret_at_root(mdp::MDP, all_node_returns, T_samples;
         plot!(q, xscale = :log10, yscale = :log10)
     end
 
-    display(q)
+    return q
 end
 
 

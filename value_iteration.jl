@@ -4,7 +4,7 @@ function value_iteration(MDP; θ = 1e-8, max_iters = 1000)
     num_states = length(MDP.states)
     num_actions = length(MDP.actions)
     γ = MDP.gamma
-    H = MDP.horizon
+    H = MDP.horizon + 1 # equals 1 if horizon is 0 → UCB1 case
     reward_function = get_reward_function(MDP)
 
     if isinf(H)
@@ -47,7 +47,7 @@ function value_iteration(MDP; θ = 1e-8, max_iters = 1000)
         # terminal values
         V[H+1, :] .= 0
 
-        for t in H:-1:1
+        for t in (H):-1:1
             for s in 1:num_states
                 q_values = zeros(num_actions)
                 for a in 1:num_actions

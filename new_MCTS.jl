@@ -176,13 +176,13 @@ function simulate(action_node, config::MCTSConfig, depth)
     """
     state = action_node.parent.state
     action = action_node.action
-    next_state,_ = step(state, action, config)
+    next_state,_ = step(state, action, config)    # Get Sₜ₊₁
     total_reward = 0.0
     discount = 1.0
 
     for d in 1:depth
-        action = sample_next_action(config.rollout_policy, next_state)
-        next_state, reward = step(next_state, action, config)
+        action = sample_next_action(config.rollout_policy, next_state) # Get Aₜ₊₁
+        next_state, reward = step(next_state, action, config) # Get (Sₜ₊₂, Rₜ₊₁)
         total_reward += discount * reward
         discount *= config.mdp.gamma
         if d == config.max_depth
@@ -282,45 +282,53 @@ function MCTS(root::StateNode, config::MCTSConfig, iterations=100; verbose::Bool
             println("Starting at root state S0 = $state")
         end
         
-        # Selection
+        # Selection phase
         if verbose 
             println("\nSelection phase:")
         end  
-        while is_fully_expanded(state_node, config) && !isempty(state_node.children) && depth < config.max_depth
+        while is_fully_expanded(state_node, config) && depth < config.max_depth + 1
             action = best_action(state_node, config, verbose)
-            next_state, reward  = step(state, action, config)
-            action_node = state_node.children[action] 
-            push!(trajectory, (action_node, reward))
-            state_node = expand!(action_node, next_state, depth + 1)
+            next_state, reward  = step(state, action, config) # Get Sₜ₊₁,Rₜ 
+            action_node = state_node.children[action]   # Get action node corresponding to Aₜ
+            push!(trajectory, (action_node, reward))    # Add Aₜ,Rₜ to trajectory 
+            state_node = expand!(action_node, next_state, depth + 1)  # Get state node corresponding to Sₜ₊₁
             depth += 1
             state = next_state
 
             if verbose
-                println("\t(A$(depth-1) = $action, R$depth = $reward, S$depth = $next_state)")
+                println("\t(A$(depth-1) = $action, R$(depth-1) = $reward, S$depth = $next_state)")
             end
         end
         
         # Expansion phase
-        if !is_fully_expanded(state_node, config) && depth < config.max_depth
+        if !is_fully_expanded(state_node, config) && depth < config.max_depth + 1
             if verbose
                 println("\nExpansion phase:")
                 println("\nS$depth = $state is unexpanded")
             end 
-            action_node = expand!(state_node, config)
-            reward = sample_reward(config.mdp, state_node.state, action_node.action)
-            push!(trajectory, (action_node, reward))
-            depth += 1
+            action_node = expand!(state_node, config)    # Get action node corresponding to Aₜ
+            reward = sample_reward(config.mdp, state_node.state, action_node.action)   # Get Rₜ
+            push!(trajectory, (action_node, reward))   # Add Aₜ,Rₜ to trajectory 
+            # depth += 1
             if verbose
-                println("\t Expanded: (A$(depth-1) = $(action_node.action), R$(depth) = $reward)")
+                println("\t Expanded: (A$(depth) = $(action_node.action), R$(depth) = $reward)")
             end
         end
 
         # Simulation
-        rollout_reward = simulate(action_node, config, config.max_depth - depth)
+        rollout_reward = simulate(action_node, config, config.max_depth - depth) # Get Rₜ₊₁ + ... 
 
         if verbose
             println("\nRollout phase:")
-            println("\tRollout return: $rollout_reward")
+            if depth ≥ config.max_depth
+                println("\t$(rollout_reward) rollout return; maximum depth reached")
+            else 
+                if depth == config.max_depth - 1
+                    println("\tRollout return: R$(depth+1) = $rollout_reward")
+                else 
+                    println("\tRollout return: R$(depth + 1) + ... + R$(config.max_depth)  = $rollout_reward")
+                end 
+            end 
         end
 
         # Backpropagation
@@ -342,7 +350,6 @@ function MCTS(root::StateNode, config::MCTSConfig, iterations=100; verbose::Bool
         node_returns[:, it] = all_cumulative_returns
         visit_counts[:, it] = counts
 
- 
         # printing 
         if verbose
             println()

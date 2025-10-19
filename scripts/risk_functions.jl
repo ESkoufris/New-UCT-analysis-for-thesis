@@ -5,13 +5,13 @@ using Plots
 S = 10
 A = 2
 gamma = 0.9
-horizons = 2
+horizons = 3
 
 for h in horizons
     H = h
 
     means, mdp = random_MDP(S, A; γ=gamma, is_deterministic=true, horizon=H, seed = 3)
-    average_sim_returns, T_samples = run_MCTS(mcts_iterations = 1_000_000, 
+    average_sim_returns, T_samples = run_MCTS(mcts_iterations = 10000, 
                                               n_simulations = 500, mdp = mdp, 
                                               H=H, verbose=false,
                                               c_param = 1)
@@ -25,9 +25,9 @@ for h in horizons
 
     # --- Bias functions ---
     compute_regret_at_root(mdp, average_sim_returns, T_samples; logscale = "none")
-    savefig("figures/newest/regret_newest_$h.png")
+    savefig("figures/final/UCT/regret.png")
     
-    compute_regret_at_root(mdp, average_sim_returns, T_samples; logscale = "x")
-    savefig("figures/newest/regret_semilogx_n
-    ewest_$h.png")
+    # compute_regret_at_root(mdp, average_sim_returns, T_samples; logscale = "x")
+    # savefig("figures/newest/regret_semilogx_n
+    # ewest_$h.png")
 end 
