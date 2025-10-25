@@ -375,10 +375,10 @@ function compute_regret_at_root_with_variability(
 
     # Per-simulation cumulative return at root over time
     # (adjust this if your notion of "return" is different)
-    empirical_returns_sim = dropdims(sum(all_node_returns, dims=2), dims=2)  # (n_sims, T)
+    empirical_returns_sim = dropdims(sum(all_node_returns, dims=2), dims=2)  # (n_sims, mcts_iterations)
 
-    mean_emp = vec(mean(empirical_returns_sim, dims=1))
-    std_emp  = vec(std(empirical_returns_sim, dims=1; corrected=true))
+    mean_emp = vec(mean(empirical_returns_sim, dims=1))                      # (T, )
+    std_emp  = vec(std(empirical_returns_sim, dims=1; corrected=true))       # (mcts_iterations, )
     println(size(std_emp))
     mean_err = abs.(mean_emp .- t_vals .* optimal_mean)
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Base directory
-OUTDIR="new_figures/UCT"
+OUTDIR="new_figures/UCT/500k"
 
 # Transition/reward cases
 CASES=(
