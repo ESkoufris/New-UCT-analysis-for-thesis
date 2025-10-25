@@ -50,45 +50,42 @@ function random_MDP(num_states::Int,
         end
     end
 
-    # # Reward distribution for each s,a
-    # if bernoulli_rewards
-    #     rewards = [0,1]
-    #     reward_dynamics = zeros(Float64, num_states, num_actions, 2)
-    #     means = zeros(Float64, num_states, num_actions)
-    #     if deterministic_rewards
-    #         for s in 1:num_states, a in 1:num_actions
-    #             # generate random Bernoulli parameter
-    #             p = rand()
-    #             reward_dynamics[s, a, :] = [p, 1 - p]
-    #             means[s,a] = p
-    #         end
-    #     end 
-    # end 
-
     # Reward distribution for each (s,a)
+    means = zeros(Float64, num_states, num_actions)
     if bernoulli_rewards
         rewards = [0, 1]
         reward_dynamics = zeros(Float64, num_states, num_actions, 2)
-        means = zeros(Float64, num_states, num_actions)
-
-        if deterministic_rewards
-            # --- deterministic rewards ---
-            for s in 1:num_states, a in 1:num_actions
-                # assign a single deterministic reward in [0,1]
-                r = rand()                     # or choose fixed value if desired
-                reward_dynamics[s, a, :] .= 0  # zero out stochastic component
-                reward_dynamics[s, a, 1] = 1   # only one possible outcome
-                means[s, a] = r                # deterministic mean reward
-            end
-        else
-            # --- stochastic Bernoulli rewards ---
-            for s in 1:num_states, a in 1:num_actions
-                p = rand()
-                reward_dynamics[s, a, :] = [p, 1 - p]  # probabilities of 1 and 0
-                means[s, a] = p
-            end
+        # --- stochastic Bernoulli rewards ---
+        for s in 1:num_states, a in 1:num_actions
+            p = rand()
+            reward_dynamics[s, a, :] = [p, 1 - p]  # probabilities of 1 and 0
+            means[s, a] = p
         end
     end
+    if deterministic_rewards && !bernoulli_rewards
+        # --- deterministic rewards ---
+        means = zeros(Float64, num_states, num_actions)
+
+        # Assign a deterministic reward per (s,a)
+        for s in 1:num_states, a in 1:num_actions
+            r = rand()               # deterministic reward value in [0,1]
+            means[s, a] = r
+        end
+
+        # Collect all unique reward values (used as support)
+        rewards = unique(vec(means))
+
+        # Reward distribution tensor: probabilities over 'rewards'
+        reward_dynamics = zeros(Float64, num_states, num_actions, length(rewards))
+
+        # For each (s,a), assign probability 1 to its corresponding reward
+        for s in 1:num_states, a in 1:num_actions
+            reward_value = means[s, a]
+            idx = findfirst(==(reward_value), rewards)
+            reward_dynamics[s, a, idx] = 1.0    # deterministic: prob=1 for that reward
+        end
+    end
+
     return (means, MDP(horizon, actions, states, rewards, reward_dynamics, γ, dynamics, is_deterministic))
 end
 

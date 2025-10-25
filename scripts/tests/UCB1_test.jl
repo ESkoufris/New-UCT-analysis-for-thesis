@@ -9,7 +9,6 @@ A = 5
 H = 0   # single horizon
 
 # --- Helper functions ---
-
 """
 Extract the mean rewards for each action at the root state.
 Adjust this function if your `means` object has a different structure.
@@ -29,7 +28,7 @@ end
 
 """
 Compute the theoretical UCB1 regret upper bound:
-R_n ≤ 8 Σ (log n / Δ_j) + (1 + π²/3) Σ Δ_j
+Rₙ ≤ 8 Σ (log n / Δ_j) + (1 + π²/3) Σ Δ_j
 """
 function ucb1_bound(ns::AbstractVector{<:Integer}, deltas::AbstractVector{<:Real})
     positive = findall(>(0), deltas)
@@ -39,7 +38,6 @@ function ucb1_bound(ns::AbstractVector{<:Integer}, deltas::AbstractVector{<:Real
 end
 
 # --- Run experiment ---
-
 means, mdp = random_MDP(S, A; γ=γ, is_deterministic=true, horizon=H, seed=3)
 
 average_sim_returns, T_samples = run_MCTS(

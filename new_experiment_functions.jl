@@ -5,7 +5,7 @@ include("MDP.jl")
 include("new_MCTS.jl")
 include("value_iteration.jl")
 using Distributions
-
+using Statistics
 
 using Plots
 
@@ -296,3 +296,138 @@ end
 ### 
 # Compute drift 
 ####
+
+
+
+function compute_regret_at_root_with_errors(
+    mdp::MDP,
+    all_node_returns,
+    T_samples;
+    root_state = 1,
+    logscale = "none",       # "none" | "x" | "y" | "xy"
+    divide_by_log = false
+)
+    n_simulations, A, mcts_iterations = size(all_node_returns)
+
+    # --- Optimal value at the root ---
+    optimal_q_values = value_iteration(mdp)[3]            # (A?, S, A)
+    arm_means = optimal_q_values[1, root_state, :]        # Q*(s=1, a)
+    optimal_mean = maximum(arm_means)
+
+    # --- Per-simulation empirical cumulative returns at the root over time ---
+    # Sum across actions to match your original construction
+    # Result: (n_simulations, mcts_iterations)
+    empirical_returns_sim = dropdims(sum(all_node_returns, dims=2), dims=2)
+
+    # --- Mean and SE across simulations at each time t ---
+    mean_empirical = vec(mean(empirical_returns_sim, dims=1))                      # (T,)
+    std_empirical  = vec(std(empirical_returns_sim,  dims=1; corrected=true))      # (T,)
+    stderr_empirical = std_empirical ./ sqrt(n_simulations)                        # (T,)
+
+    # --- Regret (error) relative to optimal cumulative return t * optimal_mean ---
+    t_vals = collect(1:mcts_iterations)
+    mean_error = abs.(mean_empirical .- t_vals .* optimal_mean)
+
+    # SE of (X - const) is the same as SE of X; abs() doesn't change SE magnitude.
+    stderr_error = copy(stderr_empirical)
+
+    # --- Optional divide by log t ---
+    if divide_by_log
+        log_terms = log.(max.(t_vals, 2))  # avoid log(1)=0
+        mean_error   .= mean_error   ./ log_terms
+        stderr_error .= stderr_error ./ log_terms
+    end
+
+    # --- Plot: mean ± 1 SE ribbon ---
+    y_label = divide_by_log ? L"\text{Regret} / \log t" : "Regret"
+    q = plot(
+        t_vals, mean_error;
+        ribbon = stderr_error,          # ±1 SE shaded band
+        xlabel = L"t",
+        ylabel = y_label,
+        label  = "Mean ± SE",
+        linewidth = 3
+    )
+
+    # --- Log scales if requested ---
+    if logscale == "x"
+        plot!(q, xscale = :log10)
+    elseif logscale == "y"
+        plot!(q, yscale = :log10)
+    elseif logscale == "xy"
+        plot!(q, xscale = :log10, yscale = :log10)
+    end
+
+    return q
+end
+
+function compute_regret_at_root_with_variability(
+    mdp::MDP, all_node_returns, T_samples;
+    root_state=1, logscale="none", divide_by_log=false,
+    band=:std  # :std for ±SD, or a tuple like (0.1, 0.9) for quantile band
+)
+    n_sims, A, T = size(all_node_returns)
+
+    # Optimal cumulative return baseline
+    Qstar = value_iteration(mdp)[3]
+    optimal_mean = maximum(Qstar[1, root_state, :])
+    t_vals = collect(1:T)
+
+    # Per-simulation cumulative return at root over time
+    # (adjust this if your notion of "return" is different)
+    empirical_returns_sim = dropdims(sum(all_node_returns, dims=2), dims=2)  # (n_sims, T)
+
+    mean_emp = vec(mean(empirical_returns_sim, dims=1))
+    std_emp  = vec(std(empirical_returns_sim, dims=1; corrected=true))
+    println(size(std_emp))
+    mean_err = abs.(mean_emp .- t_vals .* optimal_mean)
+
+    # Variability band (variance, not SE)
+    ribbon_vals = begin
+        if band === :std
+            std_emp                           # ±1 SD
+        elseif band isa Tuple && length(band) == 2
+            qlo, qhi = band
+            lo = vec(mapslices(x -> quantile(x, qlo), empirical_returns_sim; dims=1))
+            hi = vec(mapslices(x -> quantile(x, qhi), empirical_returns_sim; dims=1))
+            # convert to error relative to baseline
+            lo_err = abs.(lo .- t_vals .* optimal_mean)
+            hi_err = abs.(hi .- t_vals .* optimal_mean)
+            # Plots.jl ribbon expects symmetric or a 2-row matrix; use 2-row (lower/upper offsets)
+            vcat((mean_err .- lo_err)', (hi_err .- mean_err)')  # 2×T
+        else
+            error("band must be :std or (qlo,qhi) tuple, e.g., (0.25,0.75)")
+        end
+    end
+
+    if divide_by_log
+        logs = log.(max.(t_vals, 2))
+        mean_err ./= logs
+        if band === :std
+            ribbon_vals ./= logs
+        else
+            ribbon_vals .= ribbon_vals ./ logs'  # broadcast over 2×T
+        end
+    end
+
+    ylabel = divide_by_log ? L"\text{Error} / \log t" : "Error"
+    p = plot(t_vals, mean_err;
+        ribbon = ribbon_vals,
+        fillalpha = 0.25,
+        color = :royalblue,
+        linewidth = 4,
+        label = (band === :std ? "Mean ± SD" : "Mean with quantile band"),
+        xlabel = "Iterations",
+        ylabel = ylabel,
+    )
+
+    if logscale == "x"
+        plot!(p, xscale=:log10)
+    elseif logscale == "y"
+        plot!(p, yscale=:log10)
+    elseif logscale == "xy"
+        plot!(p, xscale=:log10, yscale=:log10)
+    end
+
+    return p
+end
